@@ -1,0 +1,56 @@
+name: External Repo Sync
+
+permissions:
+  contents: write  # 允许推送更新
+
+on:
+  schedule:
+    - cron: "0 0 * * *"  # 每天午夜执行
+  workflow_dispatch:  # 允许手动触发
+
+jobs:
+  sync_external_branch:
+    name: Sync branch from another repository
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout current repository
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          fetch-depth: 0  # 获取完整历史以便合并
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add external repository as remote
+        run: |
+          git remote add external https://github.com/eooce/Cloudflare-proxy.git
+          git fetch external main
+
+      - name: Checkout target branch
+        run: |
+          git checkout main || git checkout -b main
+
+      - name: Merge changes from external repo (prefer remote changes)
+        run: |
+          git merge external/main --allow-unrelated-histories --strategy-option theirs -m "Sync from eooce/Cloudflare-proxy:main (prefer remote version)"
+
+      - name: Push updates
+        run: |
+          git push origin main
+
+      - name: Success Message
+        if: success()
+        run: echo "✅ Sync completed successfully, preferring remote changes!"
+
+      - name: Failure Message
+        if: failure()
+        run: |
+          echo "❌ Sync failed. Possible causes:"
+          echo "1. Merge conflict not resolvable even with 'theirs'"
+          echo "2. Invalid remote or branch name"
+          echo "3. Permission issue"
+          exit 1
